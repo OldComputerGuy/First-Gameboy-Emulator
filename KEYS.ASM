@@ -1,0 +1,179 @@
+;********************************
+;	KEY EQUATE TABLES
+;********************************
+
+KEY_PORT	=	60H	
+SYSTEM_CONTROL	=	61H
+INT_CONTROL	=	20H
+
+ESC_KEY		=	01H
+ONE_KEY		=	02H
+TWO_KEY		=	03H
+THREE_KEY	=    	04H
+FOUR_KEY	=	05H
+FIVE_KEY	=	06H
+SIX_KEY		=	07H
+SEVE_KEY	=	08H
+EIGHT_KEY	=	09H
+NINE_KEY	=	0AH
+ZERO_KEY	=	0BH
+BACKSPACE_KEY	=	0EH
+TAB_KEY		=	0FH	
+Q_KEY		=	10H
+W_KEY		=	11H
+E_KEY		=	12H
+R_KEY		=	13H
+T_KEY		=	14H
+Y_KEY		=	15H
+U_KEY		=	16H
+I_KEY		=	17H
+O_KEY		=	18H
+P_KEY		=	19H
+ENTER_KEY	=	1CH
+CTRL_KEY	=	1DH
+A_KEY		=	1EH
+S_KEY		=	1FH
+D_KEY		=	20H
+F_KEY		=	21H
+G_KEY		=	22H
+H_KEY		=	23H
+J_KEY		=	24H
+K_KEU		=	25H
+L_KEY		=	26H
+LEFTSHIFT_KEY	=	2AH
+Z_KEY		=	2CH
+X_KEY		=	2DH
+C_KEY		=	2EH
+V_KEY		=	2FH
+B_KEY		=	30H
+N_KEY		=	31H
+M_KEY		=	32H
+RIGHTSHIFT_KEY	=	36H
+ALT_KEY		=	38H
+SPACEBAR_KEY	=	39H
+CAPSLOCK_KEY	=	3AH
+F1_KEY		=	3BH
+F2_KEY		=	3CH
+F3_KEY		=	3DH
+F4_KEY		=	3EH
+F5_KEY		=	3FH
+F6_KEY		=	40H
+F7_KEY		=	41H
+F8_KEY		=	42H
+F9_KEY		=	43H
+F10_KEY		=	44H
+NUMLOCK_KEY	=	45H
+SCROLLOCK_KEY	=	46H
+HOME_KEY	=	47H
+UPARROW_KEY	=	48H
+PGUP_KEY	=	49H
+LEFTARROW_KEY	=	4BH
+RIGHTARROW_KEY	=	4DH
+END_KEY		=	4FH
+DOWNARROW_KEY	=	50H
+PGDN_KEY	=	51H
+INS_KEY		=	52H
+DEL_KEY		=	53H      
+
+		MACRO	KEY @1
+		TEST	[CS:KEYTAB+@1],1
+		ENDM
+
+;********************************
+;    SET UP KEYBOARD INTERRUPT
+;********************************
+
+KEYTAB		DB	128 DUP (0)		
+
+OLD_KEY_IP	DW	0
+OLD_KEY_CS	DW	0
+
+KEY_VEC		EQU	24H			
+
+SETKEYINT:	CLI
+		
+		XOR	AX,AX
+		MOV	DS,AX
+
+		MOV	SI,OFFSET KEY_VEC
+
+		MOV	AX,[SI]
+		MOV	[CS:OLD_KEY_IP],AX
+
+		MOV	AX,[SI+2]
+		MOV	[CS:OLD_KEY_CS],AX
+
+		MOV	AX,OFFSET KEY_INT
+		MOV	[SI],AX
+		MOV	AX,CS
+		MOV	[SI+2],AX
+
+		MOV	SI,OFFSET KEYTAB
+		MOV	CX,128
+		XOR	AL,AL
+@@LOOP:
+		MOV	[CS:SI],AL
+		INC	SI
+		LOOP @@LOOP
+	
+		STI
+		RET
+
+;********************************
+;    RESTORE SYSTEM INTERRUPT
+;********************************
+
+RESKEYINT:	CLI
+		XOR	AX,AX
+		MOV	DS,AX
+
+		MOV	SI,OFFSET KEY_VEC
+
+		MOV	AX,[CS:OLD_KEY_IP]
+		MOV	[SI],AX
+
+		MOV	AX,[CS:OLD_KEY_CS]
+		MOV	[SI+2],AX
+
+		STI
+		RET
+
+;********************************
+;     KEY INTERRUPT SERVER
+;********************************
+
+
+KEY_INT:	PUSH 	AX				
+		PUSH	BX				
+
+		XOR	AH,AH				
+
+		IN 	AL,KEY_PORT			
+		AND	AL,AL				
+		JS	@@KEY_RELEASED		    	
+
+@@KEY_PRESSED:	MOV	BX,OFFSET KEYTAB
+		ADD	BX,AX
+
+		MOV	[BYTE CS:BX],1			
+		JMP	@@ENDKEY
+
+@@KEY_RELEASED:	AND	AL,7FH
+	
+		MOV	BX,OFFSET KEYTAB
+		ADD	BX,AX
+		MOV	[CS:BX],AH				
+
+@@ENDKEY:	IN	AL,SYSTEM_CONTROL		
+		OR 	AL,80H				
+		OUT 	SYSTEM_CONTROL,AL		
+
+		AND 	AL,7FH				
+		OUT 	SYSTEM_CONTROL,AL		
+
+		MOV 	AL,020H
+		OUT	INT_CONTROL,AL
+
+		POP	BX				
+		POP 	AX				
+		IRET					
